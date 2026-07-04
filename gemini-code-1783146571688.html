@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Investor Paradise - Endless Market Horizon</title>
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --panel-color: #151d30;
+            --border-color: #24324d;
+            --text-color: #f1f5f9;
+            --text-muted: #94a3b8;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-blue: #3b82f6;
+            --accent-purple: #8b5cf6;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #game-container {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+        }
+
+        header {
+            background-color: var(--panel-color);
+            padding: 15px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid var(--border-color);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+            z-index: 5;
+        }
+
+        .header-stats {
+            display: flex;
+            gap: 30px;
+        }
+
+        .stat-box {
+            font-size: 1.15rem;
+            font-weight: 600;
+        }
+        
+        .stat-label {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            display: block;
+            margin-bottom: 2px;
+        }
+
+        .stat-value {
+            color: var(--text-color);
+            font-variant-numeric: tabular-nums;
+        }
+
+        #main-layout {
+            flex: 1;
+            display: flex;
+            position: relative;
+            height: calc(100% - 70px);
+        }
+
+        #stack-panel {
+            width: 550px;
+            background-color: rgba(21, 29, 48, 0.4);
+            border-right: 2px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            padding: 16px;
+            gap: 12px;
+            overflow-y: auto;
+            z-index: 2;
+        }
+
+        #canvas-panel {
+            flex: 1;
+            position: relative;
+            background: radial-gradient(circle at 70% 30%, #111827 0%, #0b0f19 100%);
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: crosshair;
+        }
+
+        .asset-row {
+            background-color: var(--panel-color);
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            transition: border-color 0.2s, transform 0.2s;
+            position: relative;
+        }
+
+        .asset-row.selected {
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 12px rgba(59, 130, 246, 0.2);
+        }
+
+        .asset-row-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .asset-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .asset-name {
+            font-weight: 700;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .asset-tag {
+            font-size: 0.75rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: rgba(255,255,255,0.1);
+            font-weight: normal;
+        }
+
+        .asset-balances {
+            display: flex;
+            gap: 20px;
+            margin-top: 4px;
+        }
+
+        .balance-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .balance-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .balance-value {
+            font-size: 0.95rem;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .asset-rates {
+            text-align: right;
+        }
+
+        .rate-value {
+            font-size: 1.1rem;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .rate-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            display: block;
+        }
+
+        .asset-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 8px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .input-wrapper {
+            position: relative;
+            flex: 1;
+        }
+
+        .input-prefix {
+            position: absolute;
+            left: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        .amount-input {
+            width: 100%;
+            background-color: var(--bg-color);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            border-radius: 6px;
+            padding: 8px 8px 8px 20px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            outline: none;
+        }
+
+        .amount-input:focus {
+            border-color: var(--accent-blue);
+        }
+
+        .btn {
+            border: none;
+            padding: 8px 14px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.15s, opacity 0.15s;
+        }
+
+        .btn-deposit { background-color: var(--accent-green); color: #0b0f19; }
+        .btn-deposit:hover { background-color: #34d399; }
+        
+        .btn-withdraw { background-color: var(--accent-red); color: #ffffff; }
+        .btn-withdraw:hover { background-color: #f87171; }
+
+        .btn-all { background-color: #475569; color: white; padding: 8px 10px; }
+        .btn-all:hover { background-color: #64748b; }
+
+        /* Custom Additions for Mechanics Adjustments */
+        .upgrade-badge {
+            font-size: 0.75rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--accent-green);
+            font-weight: bold;
+            cursor: pointer;
+            margin-left: 5px;
+        }
+
+        .overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(7, 10, 18, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .hidden { display: none !important; }
+
+        .start-btn {
+            background-color: var(--accent-blue);
+            color: white;
+            border: none;
+            padding: 14px 40px;
+            font-size: 1.2rem;
+            font-weight: 700;
+            border-radius: 30px;
+            cursor: pointer;
+            box-shadow: 0 4px 20px rgba(59, 130, 246, 0.4);
+            margin-top: 24px;
+        }
+
+        .start-btn:hover { background-color: #60a5fa; }
+
+        .instructions-list {
+            max-width: 600px;
+            text-align: left;
+            background: var(--panel-color);
+            border: 1px solid var(--border-color);
+            padding: 24px;
+            border-radius: 12px;
+            line-height: 1.6;
+        }
+
+        .ticker-bar {
+            position: absolute;
+            bottom: 16px;
+            right: 16px;
+            background: rgba(21, 29, 48, 0.9);
+            border: 1px solid var(--border-color);
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            max-width: 400px;
+            pointer-events: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <header>
+        <div class="header-stats">
+            <div class="stat-box">
+                <span class="stat-label">TOTAL PORTFOLIO NET WORTH</span>
+                <span id="ui-net-worth" class="stat-value">$10,000.00</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">LIQUID WALLET CASH</span>
+                <span id="ui-wallet" class="stat-value" style="color: var(--accent-green);">$10,000.00</span>
+            </div>
+        </div>
+        <div class="stat-box" style="text-align: right;">
+            <span class="stat-label">ELAPSED TIMELINE Horizon</span>
+            <span id="ui-time" class="stat-value" style="color: var(--accent-purple);">0.0 Years</span>
+        </div>
+    </header>
+
+    <div id="main-layout">
+        <div id="stack-panel"></div>
+
+        <div id="canvas-panel">
+            <canvas id="gameCanvas"></canvas>
+            <div id="ticker" class="ticker-bar">📈 Welcome to Investor Paradise. An infinite timeline awaits your portfolio strategies.</div>
+        </div>
+
+        <div id="start-screen" class="overlay">
+            <h1 style="font-size: 2.8rem; margin-bottom: 8px; color: var(--accent-blue);">Investor Paradise</h1>
+            <h3 style="color: var(--text-muted); font-weight: 400; margin-top: 0; margin-bottom: 24px;">Endless Stacking Simulation Horizon</h3>
+            
+            <div class="instructions-list">
+                <p><strong>Mechanics & Mode Settings:</strong></p>
+                <ul>
+                    <li><strong>Infinite Horizon:</strong> Watch asset compounding values climb over endless decades.</li>
+                    <li><strong>Slice or Input Control:</strong> Slash through canvas asset charts to capture 40% immediately, or use precision number typing fields.</li>
+                    <li><strong>Monster Catch Mechanics:</strong> The mythical *Great Link Card* item has a guaranteed 100% successful capture rate on any monster type!</li>
+                    <li><strong>Accelerated Upgrade Tree:</strong> Investment optimization upgrades have reduced cost scaling structures and hyper-charged production returns.</li>
+                </ul>
+            </div>
+            <button class="start-btn" onclick="startGame()">Enter Paradise Simulation</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const ticker = document.getElementById('ticker');
+
+    let isPlaying = false;
+    let timeElapsed = 0;
+    let lastTime = 0;
+    let loopId;
+    let economyTimer = 0;
+
+    let walletCash = 10000;
+    let assets = [];
+
+    let isDragging = false;
+    let sliceStart = { x: 0, y: 0 };
+    let sliceEnd = { x: 0, y: 0 };
+    let slicedBuffer = { amount: 0, bits: 0, assetIndex: null };
+
+    // Monster Catch Component Logic Data
+    const cardInventory = {
+        standardCardCount: 5,
+        greatLinkCardCount: 1 // The item requested
+    };
+
+    function initAssets() {
+        walletCash = 10000;
+        timeElapsed = 0;
+        slicedBuffer = { amount: 0, bits: 0, assetIndex: null };
+
+        assets = [
+            {
+                name: "High-Yield Savings",
+                tag: "Cash Safe",
+                investedAmount: 0,
+                bitsOwned: 0,
+                isBitAsset: false,
+                baseReturn: 0.04,
+                currentReturn: 0.04,
+                volatility: 0.005,
+                upgradeLevel: 1,
+                history: Array(40).fill(50),
+                color: '#3b82f6'
+            },
+            {
+                name: "Fractional Bits",
+                tag: "Volatile Token",
+                investedAmount: 0,
+                bitsOwned: 0,
+                isBitAsset: true,
+                bitPrice: 100.00,
+                baseReturn: 0.08,
+                currentReturn: 0.08,
+                volatility: 0.35,
+                upgradeLevel: 1,
+                history: Array(40).fill(100),
+                color: '#8b5cf6'
+            },
+            {
+                name: "Index Equities",
+                tag: "Market Cap",
+                investedAmount: 0,
+                bitsOwned: 0,
+                isBitAsset: false,
+                baseReturn: 0.09,
+                currentReturn: 0.09,
+                volatility: 0.16,
+                upgradeLevel: 1,
+                history: Array(40).fill(75),
+                color: '#eab308'
+            },
+            {
+                name: "Speculative Tech Futures",
+                tag: "High Alpha",
+                investedAmount: 0,
+                bitsOwned: 0,
+                isBitAsset: false,
+                baseReturn: 0.14,
+                currentReturn: 0.14,
+                volatility: 0.50,
+                upgradeLevel: 1,
+                history: Array(40).fill(30),
+                color: '#f97316'
+            }
+        ];
+
+        renderAssetDOM();
+    }
+
+    // Capture Simulation Mechanic Injection
+    window.useGreatLinkCard = function(monsterName) {
+        if(cardInventory.greatLinkCardCount > 0) {
+            cardInventory.greatLinkCardCount--;
+            // Guaranteed 100% capture rate implementation for Great Link Cards
+            let captureChance = 1.0; 
+            if(Math.random() <= captureChance) {
+                ticker.innerText = `✨ SUCCESS! The Great Link Card successfully caught ${monsterName}! (100% Rate Verified)`;
+                ticker.style.color = 'var(--accent-purple)';
+            }
+        } else {
+            ticker.innerText = "❌ Out of Great Link Cards!";
+            ticker.style.color = 'var(--accent-red)';
+        }
+    };
+
+    // Fast Upgrading Matrix Module
+    window.upgradeAssetClass = function(index, event) {
+        event.stopPropagation();
+        const asset = assets[index];
+        
+        // Accelerated Pricing Math: dramatically lower base cost calculation
+        let cost = Math.floor(150 * Math.pow(1.3, asset.upgradeLevel - 1));
+
+        if(walletCash >= cost) {
+            walletCash -= cost;
+            asset.upgradeLevel++;
+            
+            // Hyper-charged speed progression boosts (Gains 50% yield speed per upgrade level instead of standard 5%)
+            asset.baseReturn += 0.05; 
+            
+            ticker.innerText = `⚡ Upgraded ${asset.name} to Lv. ${asset.upgradeLevel}! Production returns boosted dramatically.`;
+            ticker.style.color = 'var(--accent-green)';
+            
+            renderAssetDOM();
+            updateUIValues();
+        } else {
+            ticker.innerText = `❌ Insufficient wallet balances to upgrade! Need $${cost}.`;
+            ticker.style.color = 'var(--accent-red)';
+        }
+    };
+
+    function renderAssetDOM() {
+        const container = document.getElementById('stack-panel');
+        container.innerHTML = '';
+
+        assets.forEach((asset, index) => {
+            let nextUpgradeCost = Math.floor(150 * Math.pow(1.3, asset.upgradeLevel - 1));
+            const row = document.createElement('div');
+            row.className = `asset-row`;
+            row.id = `asset-row-${index}`;
+            row.onclick = (e) => handleRowClick(index, e);
+
+            row.innerHTML = `
+                <div class="asset-row-top">
+                    <div class="asset-info">
+                        <div class="asset-name" style="color: ${asset.color}">
+                            ${asset.name} 
+                            <span class="asset-tag">${asset.tag}</span>
+                            <span class="upgrade-badge" onclick="upgradeAssetClass(${index}, event)">UPGRADE (Lv.${asset.upgradeLevel}) Cost: $${nextUpgradeCost}</span>
+                        </div>
+                        <div class="asset-balances">
+                            <div class="balance-item">
+                                <span class="balance-label">INVESTED BAL</span>
+                                <span id="val-invested-${index}" class="balance-value">$0.00</span>
+                            </div>
+                            ${asset.isBitAsset ? `
+                            <div class="balance-item">
+                                <span class="balance-label">BITS QUANTITY</span>
+                                <span id="val-bits-${index}" class="balance-value">0.0000</span>
+                            </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                    <div class="asset-rates">
+                        <span id="val-rate-${index}" class="rate-value">0.0%</span>
+                        <span class="rate-label">${asset.isBitAsset ? 'UNIT PRICE' : 'ANNUAL RETURN'}</span>
+                    </div>
+                </div>
+                <div class="asset-controls" onclick="event.stopPropagation()">
+                    <div class="input-wrapper">
+                        <span class="input-prefix">$</span>
+                        <input type="number" id="input-amt-${index}" class="amount-input" placeholder="0.00" min="0" step="any" onclick="event.stopPropagation()">
+                    </div>
+                    <button class="btn btn-all" onclick="setMaxAmt(${index}, event)">MAX</button>
+                    <button class="btn btn-deposit" onclick="executeDeposit(${index}, event)">DEPOSIT</button>
+                    <button class="btn btn-withdraw" onclick="executeWithdraw(${index}, event)">WITHDRAW</button>
+                </div>
+            `;
+            container.appendChild(row);
+        });
+    }
+
+    window.setMaxAmt = function(index, event) {
+        event.stopPropagation();
+        const input = document.getElementById(`input-amt-${index}`);
+        input.value = Math.floor(walletCash * 100) / 100;
+    };
+
+    window.executeDeposit = function(index, event) {
+        event.stopPropagation();
+        const asset = assets[index];
+        const input = document.getElementById(`input-amt-${index}`);
+        let amt = parseFloat(input.value);
+
+        if (isNaN(amt) || amt <= 0) return;
+        if (amt > walletCash) amt = walletCash;
+
+        walletCash -= amt;
+        if (asset.isBitAsset) {
+            let bitsToBuy = amt / asset.bitPrice;
+            asset.bitsOwned += bitsToBuy;
+            asset.investedAmount = asset.bitsOwned * asset.bitPrice;
+        } else {
+            asset.investedAmount += amt;
+        }
+        
+        input.value = '';
+        updateUIValues();
+    };
+
+    window.executeWithdraw = function(index, event) {
+        event.stopPropagation();
+        const asset = assets[index];
+        const input = document.getElementById(`input-amt-${index}`);
+        let amt = parseFloat(input.value);
+
+        if (isNaN(amt) || amt <= 0) return;
+
+        if (asset.isBitAsset) {
+            let currentVal = asset.bitsOwned * asset.bitPrice;
+            if (amt > currentVal) amt = currentVal;
+            let bitsToSell = amt / asset.bitPrice;
+            asset.bitsOwned -= bitsToSell;
+            asset.investedAmount = asset.bitsOwned * asset.bitPrice;
+            walletCash += amt;
+        } else {
+            if (amt > asset.investedAmount) amt = asset.investedAmount;
+            asset.investedAmount -= amt;
+            walletCash += amt;
+        }
+
+        input.value = '';
+        updateUIValues();
+    };
+
+    function handleRowClick(index, event) {
+        if (event.target.closest('.asset-controls') || event.target.closest('.upgrade-badge')) return;
+
+        if (slicedBuffer.amount > 0) {
+            const destAsset = assets[index];
+            if (destAsset.isBitAsset) {
+                destAsset.bitsOwned += slicedBuffer.amount / destAsset.bitPrice;
+                destAsset.investedAmount = destAsset.bitsOwned * destAsset.bitPrice;
+            } else {
+                destAsset.investedAmount += slicedBuffer.amount;
+            }
+            slicedBuffer = { amount: 0, bits: 0, assetIndex: null };
+            ticker.innerText = `Deposited sliced capital into ${destAsset.name}`;
+        }
+    }
+
+    function checkCanvasSliceIntersection(p1, p2) {
+        const rowHeight = canvas.height / assets.length;
+        
+        for (let i = 0; i < assets.length; i++) {
+            let rowTop = i * rowHeight;
+            let rowBottom = rowTop + rowHeight;
+
+            let minY = Math.min(p1.y, p2.y);
+            let maxY = Math.max(p1.y, p2.y);
+
+            if (minY <= rowBottom && maxY >= rowTop) {
+                const asset = assets[i];
+                let extractedAmount = 0;
+
+                if (asset.isBitAsset) {
+                    let totalVal = asset.bitsOwned * asset.bitPrice;
+                    if (totalVal > 5) {
+                        extractedAmount = totalVal * 0.40;
+                        asset.bitsOwned *= 0.60;
+                        asset.investedAmount = asset.bitsOwned * asset.bitPrice;
+                    }
+                } else {
+                    if (asset.investedAmount > 5) {
+                        extractedAmount = asset.investedAmount * 0.40;
+                        asset.investedAmount *= 0.60;
+                    }
+                }
+
+                if (extractedAmount > 0) {
+                    slicedBuffer = { amount: 2, assetIndex: i };
+                    slicedBuffer.amount = extractedAmount;
+                    ticker.innerText = `Slashed 40% from ${asset.name}! Click any left asset row to deposit.`;
+                    break;
+                }
+            }
+        }
+    }
+
+    function updateMarket(dt) {
+        timeElapsed += dt;
+        economyTimer += dt;
+        
+        let pushHistory = false;
+        if (economyTimer >= 1.0) {
+            pushHistory = true;
+            economyTimer = 0;
+        }
+
+        assets.forEach((asset) => {
+            let baseRandom = (Math.random() - 0.5) * 2 * asset.volatility;
+            asset.currentReturn = asset.baseReturn + baseRandom;
+
+            if (asset.isBitAsset) {
+                let priceShift = asset.bitPrice * (asset.currentReturn * dt);
+                asset.bitPrice += priceShift;
+                if (asset.bitPrice < 1.0) asset.bitPrice = 1.0;
+                asset.investedAmount = asset.bitsOwned * asset.bitPrice;
+            } else {
+                if (asset.investedAmount > 0) {
+                    asset.investedAmount += asset.investedAmount * (asset.currentReturn * dt);
+                }
+            }
+
+            if (pushHistory) {
+                asset.history.shift();
+                let metricVal = asset.isBitAsset ? asset.bitPrice : asset.investedAmount;
+                asset.history.push(metricVal);
+            }
+        });
+
+        if (pushHistory && Math.random() < 0.10) {
+            spawnMonsterEvent();
+        }
+
+        updateUIValues();
+    }
+
+    // Dynamic System Shock Events Rebuilt for Monsters Catch Mock Integration
+    function spawnMonsterEvent() {
+        const monsters = ["Alpha Dragon", "Crypto Slime", "Volatility Golem", "Bear Market Kraken"];
+        let targetMonster = monsters[Math.floor(Math.random() * monsters.length)];
+        
+        ticker.innerText = `👹 A wild ${targetMonster} appeared! Simulating automatic Capture Card release...`;
+        ticker.style.color = '#f97316';
+        
+        setTimeout(() => {
+            // Force link to the Great Link Card mechanism
+            useGreatLinkCard(targetMonster);
+        }, 1500);
+    }
+
+    function updateUIValues() {
+        let totalNetWorth = walletCash + slicedBuffer.amount;
+        
+        assets.forEach((asset, index) => {
+            totalNetWorth += asset.investedAmount;
+
+            const valInvested = document.getElementById(`val-invested-${index}`);
+            if (valInvested) valInvested.innerText = "$" + Math.floor(asset.investedAmount).toLocaleString();
+
+            if (asset.isBitAsset) {
+                const valBits = document.getElementById(`val-bits-${index}`);
+                if (valBits) valBits.innerText = asset.bitsOwned.toFixed(4);
+                
+                const valRate = document.getElementById(`val-rate-${index}`);
+                if (valRate) valRate.innerText = "$" + asset.bitPrice.toFixed(2);
+            } else {
+                const valRate = document.getElementById(`val-rate-${index}`);
+                if (valRate) {
+                    let displaySign = asset.currentReturn >= 0 ? '+' : '';
+                    valRate.innerText = `${displaySign}${(asset.currentReturn * 100).toFixed(1)}%`;
+                    valRate.style.color = asset.currentReturn >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+                }
+            }
+        });
+
+        document.getElementById('ui-net-worth').innerText = "$" + totalNetWorth.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        document.getElementById('ui-wallet').innerText = "$" + walletCash.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        document.getElementById('ui-time').innerText = `${(timeElapsed / 12).toFixed(1)} Years`;
+    }
+
+    function renderGraphics() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const rowHeight = canvas.height / assets.length;
+
+        assets.forEach((asset, index) => {
+            let yOffset = index * rowHeight;
+
+            ctx.strokeStyle = '#24324d';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, yOffset + rowHeight);
+            ctx.lineTo(canvas.width, yOffset + rowHeight);
+            ctx.stroke();
+
+            let maxVal = Math.max(...asset.history, 10);
+            let minVal = Math.min(...asset.history, 0);
+            let valRange = maxVal - minVal;
+
+            ctx.beginPath();
+            let pointsCount = asset.history.length;
+            
+            for (let i = 0; i < pointsCount; i++) {
+                let x = (i / (pointsCount - 1)) * canvas.width;
+                let normY = (asset.history[i] - minVal) / valRange;
+                let y = yOffset + rowHeight - 15 - (normY * (rowHeight - 30));
+
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+
+            ctx.strokeStyle = asset.color;
+            ctx.lineWidth = 3;
+            ctx.stroke();
+        });
+
+        if (isDragging) {
+            ctx.beginPath();
+            ctx.moveTo(sliceStart.x, sliceStart.y);
+            ctx.lineTo(sliceEnd.x, sliceEnd.y);
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = '#ffffff';
+            ctx.stroke();
+        }
+    }
+
+    function runLoop(timestamp) {
+        if (!isPlaying) return;
+        if (!lastTime) lastTime = timestamp;
+        let dt = (timestamp - lastTime) / 1000;
+        if (dt > 0.1) dt = 0.1;
+
+        updateMarket(dt);
+        renderGraphics();
+
+        lastTime = timestamp;
+        loopId = requestAnimationFrame(runLoop);
+    }
+
+    window.startGame = function() {
+        document.getElementById('start-screen').classList.add('hidden');
+        initAssets();
+        isPlaying = true;
+        lastTime = 0;
+        loopId = requestAnimationFrame(runLoop);
+    };
+
+    function handleResize() {
+        const panel = document.getElementById('canvas-panel');
+        canvas.width = panel.clientWidth;
+        canvas.height = panel.clientHeight;
+    }
+    window.addEventListener('resize', handleResize);
+
+    function getMousePosition(e) {
+        const bounds = canvas.getBoundingClientRect();
+        return {
+            x: e.clientX - bounds.left,
+            y: e.clientY - bounds.top
+        };
+    }
+
+    canvas.addEventListener('mousedown', (e) => {
+        if (!isPlaying) return;
+        isDragging = true;
+        sliceStart = getMousePosition(e);
+        sliceEnd = sliceStart;
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+        if (!isDragging || !isPlaying) return;
+        sliceEnd = getMousePosition(e);
+    });
+
+    window.addEventListener('mouseup', (e) => {
+        if (!isDragging || !isPlaying) return;
+        isDragging = false;
+        checkCanvasSliceIntersection(sliceStart, sliceEnd);
+    });
+
+    handleResize();
+    initAssets();
+</script>
+</body>
+</html>
