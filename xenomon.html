@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>MatrixQuest: Hardened Core Engine</title>
+    <style>
+        body {
+            background-color: #0f111a;
+            color: #00ffcc;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            user-select: none;
+        }
+
+        #game-container {
+            position: relative;
+            box-shadow: 0 0 35px rgba(0, 255, 204, 0.4);
+            border: 6px solid #1f2335;
+            background: #020205;
+            border-radius: 4px;
+        }
+
+        canvas {
+            display: block;
+            image-rendering: pixelated;
+        }
+
+        #ui-overlay {
+            width: 512px;
+            background: #0d0f18;
+            color: #a9b1d6;
+            box-sizing: border-box;
+            padding: 12px;
+            border-top: 4px solid #1f2335;
+            display: grid; 
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .btn {
+            background: #121424;
+            color: #00ffcc;
+            border: 3px solid #00ffcc;
+            padding: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            text-align: center;
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 1px;
+            box-shadow: 2px 2px 0px #000;
+        }
+
+        .btn:hover {
+            background: #24283b;
+            transform: translate(1px, 1px);
+            box-shadow: 1px 1px 0px #000;
+        }
+
+        #dialogue-box {
+            grid-column: span 2;
+            background: #05060b;
+            border: 2px solid #1f2335;
+            padding: 10px;
+            min-height: 58px;
+            font-size: 13px;
+            line-height: 1.4;
+            font-weight: bold;
+            color: #fff;
+            white-space: pre-line;
+        }
+
+        #controls-legend {
+            margin-top: 15px;
+            color: #565f89;
+            text-align: center;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas" width="512" height="384"></canvas>
+    <div id="ui-overlay">
+        <div id="dialogue-box">Loading Mainframe Memory Bank...</div>
+        <div id="menu-buttons" style="grid-column: span 2; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;"></div>
+    </div>
+</div>
+
+<div id="controls-legend">
+    <strong>[DESKTOP COMMAND PROTOCOLS]</strong><br>
+    Grid Navigation: <strong>Arrow Keys / WASD</strong> | Action / Select: <strong>Spacebar / Enter</strong><br>
+    Item Matrix / Party Roster: <strong>Press 'V' Key</strong> (usable anytime)<br>
+    XP Bonus Info Ledger: <strong>Press 'M' Key</strong> (usable anytime)<br>
+    Compile Save File State Profile: <strong>Press 'P' Key</strong>
+</div>
+
+<script>
+const TYPE_CHART = {
+    Plasma: { Cyber: 2, Mecha: 0.5, Bio: 0.5 },
+    Bio:    { Plasma: 2, Mecha: 2, Cyber: 0.5 },
+    Cyber:  { Bio: 2, Plasma: 0.5, Mecha: 0.5 },
+    Mecha:  { Cyber: 2, Plasma: 2, Bio: 0.5 },
+    Primal: {}
+};
+
+const MOVES = {
+    "Strike":        { name: "Strike", type: "Primal", power: 35 },
+    "Laser Flare":   { name: "Laser Flare", type: "Plasma", power: 65 },
+    "Static Pulse":  { name: "Static Pulse", type: "Plasma", power: 45 },
+    "Spore Injection":{ name: "Spore Injection", type: "Bio", power: 40 },
+    "Logic Spike":   { name: "Logic Spike", type: "Cyber", power: 40 },
+    "Acid Bite":     { name: "Acid Bite", type: "Bio", power: 55 },
+    "Iron Chomp":    { name: "Iron Chomp", type: "Mecha", power: 65 },
+    "Data Drain":    { name: "Data Drain", type: "Bio", power: 60, drains: true },
+    "Sync Erase":    { name: "Sync Erase", type: "Cyber", power: 75 }
+};
+
+const CORE_INDEX = {
+    "Voltsnap":  { name: "Voltsnap", type: "Plasma", baseHp: 42, baseAtk: 58, baseDef: 38, baseSpd: 95, color: "#ff007f", moves: ["Strike", "Static Pulse"], syncRate: 200, learnTable: { 6: "Logic Spike", 10: "Laser Flare" } },
+    "Rootclash": { name: "Rootclash", type: "Bio", baseHp: 50, baseAtk: 52, baseDef: 55, baseSpd: 38, color: "#39ff14", moves: ["Strike", "Spore Injection"], syncRate: 150, learnTable: { 7: "Acid Bite", 12: "Data Drain" } },
+    "Glitchfox": { name: "Glitchfox", type: "Cyber", baseHp: 38, baseAtk: 50, baseDef: 40, baseSpd: 88, color: "#00ffff", moves: ["Strike", "Logic Spike"], syncRate: 170, learnTable: { 6: "Static Pulse", 11: "Sync Erase" } },
+    "Scrapbite": { name: "Scrapbite", type: "Bio", baseHp: 48, baseAtk: 60, baseDef: 42, baseSpd: 50, color: "#d2691e", moves: ["Strike", "Acid Bite"], syncRate: 190, learnTable: { 8: "Spore Injection" } },
+    
+    "Chiptoad":  { name: "Chiptoad", type: "Bio", baseHp: 65, baseAtk: 45, baseDef: 60, baseSpd: 30, color: "#228b22", moves: ["Strike", "Spore Injection"], syncRate: 180, learnTable: { 6: "Data Drain", 11: "Acid Bite" } },
+    "Blazewire": { name: "Blazewire", type: "Plasma", baseHp: 40, baseAtk: 65, baseDef: 35, baseSpd: 90, color: "#ff4500", moves: ["Strike", "Static Pulse"], syncRate: 140, learnTable: { 7: "Laser Flare", 13: "Logic Spike" } },
+    "Mecharaptor":{ name: "Mecharaptor", type: "Mecha", baseHp: 55, baseAtk: 70, baseDef: 48, baseSpd: 65, color: "#708090", moves: ["Strike", "Iron Chomp"], syncRate: 110, learnTable: { 9: "Laser Flare" } },
+    "Neurofly":  { name: "Neurofly", type: "Cyber", baseHp: 44, baseAtk: 48, baseDef: 42, baseSpd: 82, color: "#da70d6", moves: ["Strike", "Logic Spike"], syncRate: 160, learnTable: { 8: "Static Pulse", 13: "Sync Erase" } },
+    
+    "Null-Hound":{ name: "Null-Hound", type: "Mecha", baseHp: 65, baseAtk: 62, baseDef: 60, baseSpd: 70, color: "#e74c3c", moves: ["Strike", "Iron Chomp"], syncRate: 0, learnTable: {} },
+    "Giga-Weaver":{ name: "Giga-Weaver", type: "Bio", baseHp: 80, baseAtk: 65, baseDef: 58, baseSpd: 72, color: "#9933ff", moves: ["Strike", "Data Drain"], syncRate: 0, learnTable: {} },
+    "A.E.G.I.S. Core":{ name: "A.E.G.I.S. Core", type: "Mecha", baseHp: 100, baseAtk: 72, baseDef: 75, baseSpd: 80, color: "#ffffff", moves: ["Strike", "Sync Erase"], syncRate: 0, learnTable: {} }
+};
+
+const MAP_DIRECTORY = {
+    "SECTOR_01": {
+        name: "Sector 01: Sub-Grid Slums", groundColor: "#05070f", grassColor: "#00ffcc", wallColor: "#1a1f35", spawnPool: ["Scrapbite", "Rootclash", "Chiptoad"], levelMin: 2, levelMax: 4,
+        layout: [
+            [2,2,2,2,2,2,4,4,4,2,2,2,2,2,2,2], [2,1,1,1,0,0,0,0,5,0,0,1,1,1,1,2], [2,1,1,1,0,0,0,0,0,0,0,1,1,1,1,2], [2,1,1,1,0,2,2,2,2,0,0,1,1,1,1,2], [2,0,0,0,0,2,2,2,2,0,0,0,0,0,0,2], [2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2], [2,0,0,0,0,0,0,0,0,0,0,0,2,2,0,2], [2,1,1,0,0,0,2,2,2,0,0,0,2,2,6,2], [2,2,2,2,2,0,0,0,3,0,0,0,2,2,2,2], [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2]
+        ],
+        npcs: [
+            { id: "null_zero", name: "NULL-ZERO", gridX: 6, gridY: 5, color: "#a020f0", lines: ["Head North to enter the Neon Core, or get a Decrypt Key to test the Southern gate thread."] },
+            { id: "splicer_jack", name: "SPLICER-JACK", gridX: 10, gridY: 5, color: "#ff9933", isShop: true, lines: ["Need more processing patches? Let's check your fragment bank ledger."] }
+        ],
+        northWarp: { mapKey: "SECTOR_02", spawnX: 8, spawnY: 6 }, 
+        southWarp: { mapKey: "SECTOR_03", spawnX: 8, spawnY: 1 }
+    },
+    "SECTOR_02": {
+        name: "Sector 02: The Neon Core", groundColor: "#140026", grassColor: "#ff007f", wallColor: "#0d0f18", spawnPool: ["Glitchfox", "Blazewire", "Neurofly"], levelMin: 5, levelMax: 7,
+        layout: [
+            [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2], [2,2,2,2,2,2,2,0,0,0,0,2,2,2,2,2], [2,0,0,0,1,1,1,0,0,0,0,0,0,0,0,2], [2,0,2,0,1,1,1,1,1,1,1,0,2,2,0,2], [2,0,2,0,0,0,0,0,0,0,0,0,2,2,0,2], [2,0,2,2,2,2,0,0,0,2,2,2,2,2,0,2], [2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2], [2,1,1,0,0,0,0,0,0,0,0,0,0,1,1,2], [2,2,2,2,2,2,2,4,4,4,2,2,2,2,2,2], [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2]
+        ],
+        npcs: [
+            { id: "proxy_8", name: "PROXY-8", gridX: 4, gridY: 4, color: "#00ffaa", lines: ["Vector handles security parameters inside this sector node path."] },
+            { id: "vector_boss", name: "ENFORCER VECTOR", gridX: 11, gridY: 2, color: "#e74c3c", isBoss: true, lines: ["Unauthorized user matrix discovered. Launching terminal overwrite sequence..."] }
+        ],
+        southWarp: { mapKey: "SECTOR_01", spawnX: 7, spawnY: 2 } 
+    },
+    "SECTOR_03": {
+        name: "Sector 03: The Corporate Cloud", groundColor: "#0b121e", grassColor: "#00ffff", wallColor: "#ffffff", spawnPool: ["Glitchfox", "Mecharaptor"], levelMin: 10, levelMax: 12,
+        layout: [
+            [2,2,2,2,2,2,2,4,4,4,2,2,2,2,2,2], [2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2], [2,0,1,1,1,1,1,1,1,1,1,1,1,1,0,2], [2,0,1,0,0,0,0,0,0,0,0,0,0,1,0,2], [2,0,1,0,0,2,2,0,2,2,0,0,0,1,0,2], [2,0,1,0,0,0,0,0,0,0,0,0,0,1,0,2], [2,0,1,1,1,1,1,1,1,1,1,1,1,1,0,2], [2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2], [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2]
+        ],
+        npcs: [
+            { id: "cipher_boss", name: "CIPHER MUTATION", gridX: 7, gridY: 4, color: "#9933ff", isBoss: true, lines: ["GIGA-WEAVER ACTIVE PROFILE LOADED... FLUSH SYSTEM STACK LAYER!"]},
+            { id: "aegis_boss", name: "A.E.G.I.S. GOVERNOR", gridX: 7, gridY: 1, color: "#ffffff", isBoss: true, lines: ["Core configuration mismatch. Executing high capacity hardware wipe sequence..."]}
+        ],
+        northWarp: { mapKey: "SECTOR_01", spawnX: 8, spawnY: 7 } 
+    }
+};
+
+const SoundFX = {
+    ctx: null,
+    init() { if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)(); },
+    play(type) {
+        this.init(); if (!this.ctx) return;
+        const osc = this.ctx.createOscillator(); const gain = this.ctx.createGain();
+        osc.connect(gain); gain.connect(this.ctx.destination); const now = this.ctx.currentTime;
+        switch(type) {
+            case 'hit':
+                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(260, now); osc.frequency.exponentialRampToValueAtTime(30, now + 0.1);
+                gain.gain.setValueAtTime(0.06, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1); osc.start(now); osc.stop(now + 0.1); break;
+            case 'text':
+                osc.type = 'triangle'; osc.frequency.setValueAtTime(380, now);
+                gain.gain.setValueAtTime(0.02, now); gain.gain.exponentialRampToValueAtTime(0.005, now + 0.03); osc.start(now); osc.stop(now + 0.03); break;
+            case 'heal':
+                osc.type = 'sine'; osc.frequency.setValueAtTime(440, now); osc.frequency.setValueAtTime(554, now + 0.08); osc.frequency.setValueAtTime(659, now + 0.16);
+                gain.gain.setValueAtTime(0.06, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3); osc.start(now); osc.stop(now + 0.3); break;
+            case 'levelUp':
+                osc.type = 'sine'; osc.frequency.setValueAtTime(523, now); osc.frequency.setValueAtTime(659, now + 0.1); osc.frequency.setValueAtTime(987, now + 0.2);
+                gain.gain.setValueAtTime(0.06, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35); osc.start(now); osc.stop(now + 0.35); break;
+        }
+    }
+};
+
+class Monster {
+    constructor(speciesName, level = 5) {
+        const data = CORE_INDEX[speciesName];
+        this.species = speciesName; this.name = data.name; this.type = data.type;
+        this.level = level; this.color = data.color; this.moves = [...data.moves]; this.syncRate = data.syncRate;
+        this.maxHp = Math.floor((data.baseHp * 2 * level) / 100) + level + 10; this.hp = this.maxHp;
+        this.atk = Math.floor((data.baseAtk * 2 * level) / 100) + 5; this.def = Math.floor((data.baseDef * 2 * level) / 100) + 5;
+        this.spd = Math.floor((data.baseSpd * 2 * level) / 100) + 5; this.exp = 0; this.expNeeded = Math.pow(this.level, 3);
+        this.isOverclocked = false;
+    }
+    gainExp(amount) {
+        this.exp += amount; let logString = ""; let levelsGained = [];
+        while (this.exp >= this.expNeeded) {
+            this.level++; this.expNeeded = Math.pow(this.level, 3); levelsGained.push(this.level);
+            const data = CORE_INDEX[this.species]; const oldMax = this.maxHp;
+            const hpGain = Math.max(1, Math.floor(oldMax * 0.05)); this.maxHp = oldMax + hpGain; this.hp += hpGain;
+            this.atk = Math.floor((data.baseAtk * 2 * this.level) / 100) + 5; this.def = Math.floor((data.baseDef * 2 * this.level) / 100) + 5;
+            this.spd = Math.floor((data.baseSpd * 2 * this.level) / 100) + 5;
+            logString += `\n${this.name} expanded to Level ${this.level}!`;
+            if (data.learnTable[this.level] !== undefined) {
+                let targetMove = data.learnTable[this.level];
+                if (!this.moves.includes(targetMove)) { this.moves.push(targetMove); logString += `\n[COMPILE SUCCESS]: Learned ${targetMove.toUpperCase()}!`; }
+            }
+        }
+        return { log: logString, levelsGained };
+    }
+}
+
+const Game = {
+    canvas: document.getElementById("gameCanvas"),
+    ctx: document.getElementById("gameCanvas").getContext("2d"),
+    ui: document.getElementById("ui-overlay"),
+    dialogue: document.getElementById("dialogue-box"),
+    buttonsContainer: document.getElementById("menu-buttons"),
+    
+    gameState: "STARTER_SELECT", 
+    battleSubState: "MAIN_MENU", keys: {}, inputLock: false,
+    currentMapKey: "SECTOR_01", activeMap: null, dialogueQueue: [], currentSpeaker: "", activeInteractingNpc: null,
+    playerParty: [], activePlayerMon: null, enemyMon: null, isBossBattle: false, activeBossSpecies: "",
+    inventory: { "Nano-Repair": 5, "Link Card": 3, "Decrypt Key": 0, "Great Link": 0, "XP Candy": 0 }, linkDataFragments: 20, 
+    tileSize: 32, playerGridPos: { x: 4, y: 5 }, pixelPos: { x: 4 * 32, y: 5 * 32 }, moveCooldown: 0, transitionTimer: 0,
+    combatLogFeed: "",
+    previousGameStateForRoster: null, rosterSubMode: "ITEMS", rosterSelectedItem: null, catchCount: 0,
+    previousGameStateForXpInfo: null,
+
+    init() {
+        localStorage.removeItem("xenomon_save_profile");
+        this.initStarterSelectionScreen();
+
+        window.addEventListener("keydown", e => { 
+            const blockedKeys = ["arrowup", "arrowdown", "arrowleft", "arrowright", " "];
+            if (blockedKeys.includes(e.key.toLowerCase())) {
+                e.preventDefault(); 
+            }
+            if (e.key === " " || e.key === "Enter") { this.processActionTrigger(); return; }
+            this.keys[e.key.toLowerCase()] = true;
+            if (e.key.toLowerCase() === "p" && this.gameState === "OVERWORLD") this.saveProfileToStorage();
+            if (e.key.toLowerCase() === "v") this.toggleRosterView();
+            if (e.key.toLowerCase() === "m") this.toggleXpInfoView();
+        });
+        window.addEventListener("keyup", e => { 
+            this.keys[e.key.toLowerCase()] = false; 
+        });
+        this.loop();
+    },
+
+    initStarterSelectionScreen() {
+        this.gameState = "STARTER_SELECT";
+        this.dialogue.innerText = "=== SYSTEM DIAGNOSTIC: UNCLAIMED SQUAD REGISTRY ===\nSelect an identity core profile block to allocate your data stack loop:";
+        this.buttonsContainer.innerHTML = "";
+        this.createStarterSelectionOption("VOLTSNAP [PLASMA]", "Voltsnap");
+        this.createStarterSelectionOption("GLITCHFOX [CYBER]", "Glitchfox");
+        this.createStarterSelectionOption("ROOTCLASH [BIO]", "Rootclash");
+    },
+
+    createStarterSelectionOption(label, speciesKey) {
+        const btn = document.createElement("div"); btn.className = "btn"; btn.innerText = label;
+        btn.onclick = () => {
+            this.playerParty = [new Monster(speciesKey, 5)]; this.activePlayerMon = this.playerParty[0];
+            this.activeMap = MAP_DIRECTORY[this.currentMapKey];
+            
+            // FIXED: Synchronous reset order stops render-stalls completely
+            this.buttonsContainer.innerHTML = ""; 
+            this.gameState = "OVERWORLD";
+            this.dialogue.innerText = "Mainframe Active. Ready for command logs.";
+            
+            SoundFX.play('levelUp'); 
+            this.saveProfileToStorage();
+            
+            // ALERT BUFFER: Safely alerts user outside the canvas thread loop
+            alert(`Core compilation link built with [${speciesKey.toUpperCase()}] successfully.`);
+        };
+        this.buttonsContainer.appendChild(btn);
+    },
+
+    saveProfileToStorage() {
+        const saveState = {
+            mapKey: this.currentMapKey, gridPos: this.playerGridPos, inventory: this.inventory, shards: this.linkDataFragments, catchCount: this.catchCount,
+            party: this.playerParty.map(mon => ({ species: mon.species, level: mon.level, hp: mon.hp, exp: mon.exp, moves: mon.moves }))
+        };
+        localStorage.setItem("xenomon_save_profile", JSON.stringify(saveState)); SoundFX.play('heal');
+    },
+
+    loadProfileFromStorage() {
+        const raw = localStorage.getItem("xenomon_save_profile");
+        if (!raw) return false;
+        try {
+            const data = JSON.parse(raw);
+            if (!data.party || !data.party.length || !data.mapKey) return false;
+            this.currentMapKey = data.mapKey; this.playerGridPos = data.gridPos;
+            this.pixelPos = { x: data.gridPos.x * this.tileSize, y: data.gridPos.y * this.tileSize };
+            this.inventory = data.inventory; this.linkDataFragments = data.shards; this.catchCount = data.catchCount || 0;
+            this.playerParty = data.party.map(pData => {
+                let m = new Monster(pData.species, pData.level); m.hp = pData.hp; m.exp = pData.exp; m.moves = pData.moves; return m;
+            });
+            return true;
+        } catch(e) { 
+            return false; 
+        }
+    },
+
+    toggleXpInfoView() {
+        if (this.inputLock) return;
+        const blockedStates = ["STARTER_SELECT", "GAME_OVER", "TRANSITION", "SELL_MENU", "ROSTER_VIEW"];
+        if (blockedStates.includes(this.gameState)) return;
+        if (this.gameState === "XP_INFO") {
+            this.gameState = this.previousGameStateForXpInfo || "OVERWORLD";
+            this.previousGameStateForXpInfo = null;
+            if (this.gameState === "OVERWORLD") this.dialogue.innerText = "Mainframe Active. Ready for command logs.";
+            if (this.gameState === "BATTLE") { this.initBattleUI(); }
+            return;
+        }
+        this.previousGameStateForXpInfo = this.gameState;
+        this.gameState = "XP_INFO";
+        this.ui.style.display = "grid";
+        this.dialogue.innerText = "=== XP BONUS LEDGER (M) ===\n" +
+            "1) Base kill EXP is now x1.5 boosted.\n" +
+            "2) Any level-up relays +10 EXP (per level) to every OTHER squad member.\n" +
+            "3) Reaching Level 20 grants the WHOLE squad a +90 EXP milestone bonus.\n" +
+            "4) XP Candy (buy from Splicer-Jack, 30F) grants +60 EXP directly via the V menu.";
+        this.buttonsContainer.innerHTML = "";
+        const closeBtn = document.createElement("div"); closeBtn.className = "btn"; closeBtn.style.gridColumn = "span 2"; closeBtn.innerText = "CLOSE (M)"; closeBtn.onclick = () => this.toggleXpInfoView(); this.buttonsContainer.appendChild(closeBtn);
+    },
+
+    toggleRosterView() {
+        if (this.inputLock) return;
+        const blockedStates = ["STARTER_SELECT", "GAME_OVER", "TRANSITION", "SELL_MENU", "XP_INFO"];
+        if (blockedStates.includes(this.gameState)) return;
+        if (this.gameState === "ROSTER_VIEW") {
+            this.gameState = this.previousGameStateForRoster || "OVERWORLD";
+            this.previousGameStateForRoster = null;
+            if (this.gameState === "OVERWORLD") this.dialogue.innerText = "Mainframe Active. Ready for command logs.";
+            if (this.gameState === "BATTLE") { this.initBattleUI(); } 
+            return;
+        }
+        this.previousGameStateForRoster = this.gameState;
+        this.gameState = "ROSTER_VIEW";
+        this.rosterSubMode = "ITEMS"; this.rosterSelectedItem = null;
+        this.ui.style.display = "grid";
+        this.initRosterUI();
+    },
+
+    initRosterUI() {
+        this.buttonsContainer.innerHTML = "";
+        if (this.rosterSubMode === "ITEMS") {
+            this.dialogue.innerText = "=== ITEM MATRIX ACCESS (V) ===\nSelect a package to route to a squad member:";
+            const usableItems = ["Nano-Repair", "XP Candy"];
+            usableItems.forEach(itemKey => {
+                let count = this.inventory[itemKey] || 0;
+                if (count > 0) { this.createMenuButton(`${itemKey} (${count})`, () => { this.rosterSubMode = "SELECT_TARGET"; this.rosterSelectedItem = itemKey; this.initRosterUI(); }); }
+            });
+            const closeBtn = document.createElement("div"); closeBtn.className = "btn"; closeBtn.innerText = "CLOSE (V)"; closeBtn.onclick = () => this.toggleRosterView(); this.buttonsContainer.appendChild(closeBtn);
+        } else if (this.rosterSubMode === "SELECT_TARGET") {
+            this.dialogue.innerText = `=== ROUTE ${this.rosterSelectedItem.toUpperCase()} ===\nChoose target squad member:`;
+            this.playerParty.forEach((mon, index) => {
+                let statusLabel = `(${mon.hp}/${mon.maxHp} HP)`;
+                this.createPartyRosterButton(mon, index, statusLabel, () => this.applyRosterItemToTarget(index));
+            });
+            const backBtn = document.createElement("div"); backBtn.className = "btn"; backBtn.innerText = "<< CANCEL"; backBtn.onclick = () => { this.rosterSubMode = "ITEMS"; this.rosterSelectedItem = null; this.initRosterUI(); }; this.buttonsContainer.appendChild(backBtn);
+        }
+    },
+
+    applyRosterItemToTarget(index) {
+        const mon = this.playerParty[index]; const itemKey = this.rosterSelectedItem;
+        if (!mon || !itemKey || (this.inventory[itemKey] || 0) <= 0) { this.rosterSubMode = "ITEMS"; this.initRosterUI(); return; }
+        this.inventory[itemKey]--;
+        if (itemKey === "Nano-Repair") {
+            mon.hp = Math.min(mon.maxHp, mon.hp + 25);
+            SoundFX.play('heal');
+            this.dialogue.innerText = `Nano-Repair sequence initialized. +25 HP committed to ${mon.name}.`;
+        } else if (itemKey === "XP Candy") {
+            let result = mon.gainExp(60);
+            let bonusLog = this.grantPartyLevelUpBonus(mon, result.levelsGained);
+            SoundFX.play('levelUp');
+            this.dialogue.innerText = `XP Candy dissolved into ${mon.name}'s data stack. +60 EXP.${result.log}${bonusLog}`;
+        }
+        this.saveProfileToStorage();
+        this.rosterSubMode = "ITEMS"; this.rosterSelectedItem = null;
+        this.buttonsContainer.innerHTML = "";
+        const okBtn = document.createElement("div"); okBtn.className = "btn"; okBtn.style.gridColumn = "span 2"; okBtn.innerText = "CONTINUE"; okBtn.onclick = () => this.initRosterUI(); this.buttonsContainer.appendChild(okBtn);
+    },
+
+    grantPartyLevelUpBonus(sourceMon, levelsGained) {
+        if (!levelsGained || levelsGained.length === 0) return "";
+        let bonusLog = "";
+        let othersExist = this.playerParty.some(m => m !== sourceMon);
+        if (othersExist) {
+            let sharedAmount = 10 * levelsGained.length;
+            this.playerParty.forEach(mon => { if (mon !== sourceMon) mon.gainExp(sharedAmount); });
+            bonusLog += `\n[SYNC BONUS]: Squad-wide +${sharedAmount} EXP relayed to other units.`;
+        }
+        if (levelsGained.includes(20)) {
+            this.playerParty.forEach(mon => mon.gainExp(90));
+            bonusLog += `\n[MILESTONE BONUS]: LEVEL 20 THRESHOLD REACHED! All squad members +90 EXP.`;
+        }
+        return bonusLog;
+    },
+
+    checkCatchMilestone() {
+        this.catchCount++;
+        if (this.catchCount % 5 === 0) {
+            this.linkDataFragments += 50;
+            return `\n[CATCH MILESTONE]: ${this.catchCount} cores linked! +50F bonus fragments awarded.`;
+        }
+        return "";
+    },
+
+    processActionTrigger() { 
+        if (this.inputLock) return;
+        if (this.gameState === "OVERWORLD") this.checkNPCInteraction(); 
+        else if (this.gameState === "TEXT_BOX") this.advanceDialogue(); 
+    },
+    loop() { Game.update(); Game.render(); requestAnimationFrame(Game.loop); },
+
+    update() {
+        if (this.gameState === "OVERWORLD") { this.handleGridMovement(); } 
+        else if (this.gameState === "TRANSITION") {
+            this.transitionTimer += 4; if (this.transitionTimer >= 100) {
+                this.transitionTimer = 0; if (this.pendingMapWarp) this.executeWarpResolution();
+                else { this.gameState = "BATTLE"; this.battleSubState = "MAIN_MENU"; this.ui.style.display = "grid"; this.initBattleUI(); }
+            }
+        }
+    },
+
+    handleGridMovement() {
+        if (!this.activeMap) return; // Defensive guard layout protection
+        const targetX = this.playerGridPos.x * this.tileSize; const targetY = this.playerGridPos.y * this.tileSize;
+        if (this.pixelPos.x < targetX) this.pixelPos.x += 4; if (this.pixelPos.x > targetX) this.pixelPos.x -= 4;
+        if (this.pixelPos.y < targetY) this.pixelPos.y += 4; if (this.pixelPos.y > targetY) this.pixelPos.y -= 4;
+        if (this.pixelPos.x === targetX && this.pixelPos.y === targetY) {
+            if (this.moveCooldown > 0) { this.moveCooldown--; return; }
+            let nextX = this.playerGridPos.x; let nextY = this.playerGridPos.y;
+            
+            if (this.keys["arrowup"] || this.keys["w"]) nextY--; 
+            else if (this.keys["arrowdown"] || this.keys["s"]) nextY++; 
+            else if (this.keys["arrowleft"] || this.keys["a"]) nextX--; 
+            else if (this.keys["arrowright"] || this.keys["d"]) nextX++;
+
+            if (nextX !== this.playerGridPos.x || nextY !== this.playerGridPos.y) {
+                if (nextY >= 0 && nextY < this.activeMap.layout.length && nextX >= 0 && nextX < this.activeMap.layout[0].length) {
+                    let tile = this.activeMap.layout[nextY][nextX]; let npcPresent = this.activeMap.npcs.some(n => n.gridX === nextX && n.gridY === nextY);
+                    
+                    if (nextY === 0 && this.activeMap.northWarp) {
+                        this.pendingMapWarp = this.activeMap.northWarp; this.gameState = "TRANSITION"; this.transitionTimer = 0; return;
+                    }
+                    if (nextY === this.activeMap.layout.length - 1 || (this.currentMapKey === "SECTOR_02" && nextY === 8)) {
+                        if (this.activeMap.southWarp) {
+                            if (this.currentMapKey === "SECTOR_01" && this.inventory["Decrypt Key"] <= 0) {
+                                this.triggerDialogue("SECURITY TERMINAL", ["CRITICAL LINK LOCK: DECRYPT PACKAGE ABSENT.", "Defeat Enforcer Vector inside the Neon Core to compile credentials."]);
+                                this.moveCooldown = 12; return;
+                            }
+                            this.pendingMapWarp = this.activeMap.southWarp; this.gameState = "TRANSITION"; this.transitionTimer = 0; return;
+                        }
+                    }
+
+                    if (tile !== 2 && tile !== 6 && !npcPresent) {
+                        this.playerGridPos.x = nextX; this.playerGridPos.y = nextY; this.moveCooldown = 2; 
+                        if (tile === 1 && Math.random() < 0.12) this.triggerBattlePipeline(false); 
+                    }
+                }
+            }
+        }
+    },
+
+    executeWarpResolution() { 
+        const target = this.pendingMapWarp; this.currentMapKey = target.mapKey; this.activeMap = MAP_DIRECTORY[this.currentMapKey]; 
+        this.playerGridPos.x = target.spawnX; this.playerGridPos.y = target.spawnY; 
+        this.pixelPos.x = target.spawnX * this.tileSize; this.pixelPos.y = target.spawnY * this.tileSize; 
+        this.pendingMapWarp = null; this.gameState = "OVERWORLD"; 
+        this.keys = {}; 
+        this.moveCooldown = 20; 
+        this.saveProfileToStorage(); 
+    },
+    checkNPCInteraction() { if (!this.activeMap) return; if (this.currentMapKey === "SECTOR_01" && this.playerGridPos.y - 1 === 1 && this.playerGridPos.x === 8) { this.executeSanctuaryHeal(); return; } for (let r = 0; r < this.activeMap.layout.length; r++) { for (let c = 0; c < this.activeMap.layout[r].length; c++) { if (this.activeMap.layout[r][c] === 6) { let gdx = Math.abs(this.playerGridPos.x - c); let gdy = Math.abs(this.playerGridPos.y - r); if ((gdx === 1 && gdy === 0) || (gdx === 0 && gdy === 1)) { this.openSellTerminal(); return; } } } } for (let npc of this.activeMap.npcs) { let dx = Math.abs(this.playerGridPos.x - npc.gridX); let dy = Math.abs(this.playerGridPos.y - npc.gridY); if ((dx === 1 && dy === 0) || (dx === 0 && dy === 1)) { this.activeInteractingNpc = npc; this.triggerDialogue(npc.name, npc.lines); return; } } },
+    openSellTerminal() {
+        this.gameState = "SELL_MENU"; this.ui.style.display = "grid";
+        this.dialogue.innerText = `=== GOLD SELL TERMINAL ===\nLiquidate squad members for shard fragments. Price = Level² Fragments. Current Balance: ${this.linkDataFragments}F.`;
+        this.buttonsContainer.innerHTML = "";
+        this.playerParty.forEach((mon, index) => { let price = mon.level * mon.level; this.createMenuButton(`SELL ${mon.name} Lv${mon.level} (+${price}F)`, () => this.sellPartyMember(index)); });
+        const closeBtn = document.createElement("div"); closeBtn.className = "btn"; closeBtn.style.gridColumn = "span 2"; closeBtn.innerText = "DISCONNECT TERMINAL"; closeBtn.onclick = () => { this.gameState = "OVERWORLD"; this.dialogue.innerText = "Mainframe Active. Ready for command logs."; }; this.buttonsContainer.appendChild(closeBtn);
+    },
+    sellPartyMember(index) {
+        if (this.playerParty.length <= 1) { this.dialogue.innerText = "LIQUIDATION DENIED: CANNOT DECOMMISSION FINAL ACTIVE UNIT."; return; }
+        const mon = this.playerParty[index]; const price = mon.level * mon.level;
+        this.linkDataFragments += price; this.playerParty.splice(index, 1);
+        if (this.activePlayerMon === mon) this.activePlayerMon = this.playerParty[0];
+        SoundFX.play('heal'); this.saveProfileToStorage();
+        this.dialogue.innerText = `${mon.name} liquidated for +${price}F. Balance: ${this.linkDataFragments}F.`;
+        this.openSellTerminal();
+    },
+    executeSanctuaryHeal() { 
+        if (this.playerParty.length === 0) { this.triggerDialogue("SANCTUARY", ["NO ACTIVE LINK TARGETS DETECTED."]); return; }
+        let totalMissingHp = 0;
+        this.playerParty.forEach(mon => { totalMissingHp += Math.max(0, mon.maxHp - mon.hp); });
+        let totalCost = Math.ceil(totalMissingHp / 2);
+        if (this.linkDataFragments < totalCost) { this.triggerDialogue("SANCTUARY", ["INSUFFICIENT FRAGMENTS FOR FULL RECOVERY.", `REQUIRES ${totalCost}F (2 HP PER 1F) TO RESTORE ALL HEALTH.`]); return; }
+        SoundFX.play('heal');
+        this.linkDataFragments -= totalCost;
+        this.playerParty.forEach(mon => mon.hp = mon.maxHp);
+        this.triggerDialogue("SANCTUARY", ["CONNECTIONS STABLE... Squad sector allocations systematically refreshed.", `SPENT ${totalCost}F TO RESTORE ALL HEALTH (2 HP PER 1F).`]);
+    },
+    triggerDialogue(speakerName, textLinesArray) { this.gameState = "TEXT_BOX"; this.currentSpeaker = speakerName; this.dialogueQueue = [...textLinesArray]; this.buttonsContainer.innerHTML = ""; this.advanceDialogue(); },
+    
+    advanceDialogue() {
+        if (this.dialogueQueue.length > 0) { 
+            SoundFX.play('text'); let nextLine = this.dialogueQueue.shift(); this.dialogue.innerText = `[${this.currentSpeaker}]: ${nextLine}`; 
+            this.buttonsContainer.innerHTML = "<div class='btn' style='grid-column: span 2;'>>> TAP SPACEBAR TO READ METRICS <<</div>"; 
+        } 
+        else {
+            this.inputLock = true; this.gameState = "OVERWORLD"; this.dialogue.innerText = "Mainframe Active. Ready for command logs.";
+            if (this.activeInteractingNpc && this.activeInteractingNpc.isBoss) {
+                let id = this.activeInteractingNpc.id; if(id !== "aegis_boss") this.activeMap.npcs = this.activeMap.npcs.filter(n => n.id !== id);
+                this.activeInteractingNpc = null; this.ui.style.display = "none";
+                let species = (id === "aegis_boss") ? "A.E.G.I.S. Core" : (id === "cipher_boss") ? "Giga-Weaver" : "Null-Hound"; this.triggerBattlePipeline(true, species);
+                this.inputLock = false;
+            } else if (this.activeInteractingNpc && this.activeInteractingNpc.isShop) { 
+                this.openMerchantStoreMenu(); this.inputLock = false;
+            } else { 
+                this.activeInteractingNpc = null; this.currentSpeaker = ""; setTimeout(() => { Game.inputLock = false; }, 200); 
+            }
+        }
+    },
+
+    openMerchantStoreMenu() {
+        this.gameState = "SHOP_MENU"; this.dialogue.innerText = `[MERCHANT CONTROLLER] Shards: ${this.linkDataFragments}F.`; this.buttonsContainer.innerHTML = "";
+        this.createShopButton("BUY REPAIR SCRIPT (15F)", 15, "Nano-Repair"); this.createShopButton("BUY LINK ARRAY (25F)", 25, "Link Card"); this.createShopButton("BUY GREAT LINK (40F)", 40, "Great Link"); this.createShopButton("BUY XP CANDY (30F)", 30, "XP Candy");
+        const closeBtn = document.createElement("div"); closeBtn.className = "btn"; closeBtn.innerText = "DISCONNECT TERMINAL"; closeBtn.onclick = () => { this.activeInteractingNpc = null; this.gameState = "OVERWORLD"; }; this.buttonsContainer.appendChild(closeBtn);
+    },
+
+    createShopButton(label, cost, itemKey) { const btn = document.createElement("div"); btn.className = "btn"; btn.innerText = label; btn.onclick = () => { if (this.linkDataFragments >= cost) { this.linkDataFragments -= cost; this.inventory[itemKey]++; SoundFX.play('heal'); this.openMerchantStoreMenu(); } }; this.buttonsContainer.appendChild(btn); },
+    triggerBattlePipeline(isBoss, bossMonSpecies) { this.gameState = "TRANSITION"; this.transitionTimer = 0; this.pendingMapWarp = null; this.isBossBattle = isBoss; this.activeBossSpecies = isBoss ? bossMonSpecies : ""; if (isBoss) { let level = (bossMonSpecies === "A.E.G.I.S. Core" ? 25 : (bossMonSpecies === "Giga-Weaver" ? 18 : 10)); this.enemyMon = new Monster(bossMonSpecies, level); this.combatLogFeed = `[GOVERNOR INTERCEPT]: Overwriting environment with ${this.enemyMon.name}.`; } else { const pool = this.activeMap.spawnPool; const spec = pool[Math.floor(Math.random() * pool.length)]; const finalLvl = Math.floor(Math.random() * (this.activeMap.levelMax - this.activeMap.levelMin + 1)) + this.activeMap.levelMin; this.enemyMon = new Monster(spec, finalLvl); this.combatLogFeed = `[GRID ENCOUNTER]: Unidentified element wild ${this.enemyMon.name} spotted.`; } this.dialogue.innerText = this.combatLogFeed; },
+
+    drawHumanoidSprite(x, y, color, typeLabel) {
+        const pulse = Math.sin(Date.now() / 180) * 1.5;
+        this.ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+        this.ctx.beginPath();
+        this.ctx.ellipse(x + 16, y + 28, 10, 4, 0, 0, Math.PI * 2);
+        this.ctx.fill();
+
+        this.ctx.fillStyle = "#121424";
+        this.ctx.fillRect(x + 10, y + 22, 4, 6);
+        this.ctx.fillRect(x + 18, y + 22, 4, 6);
+
+        this.ctx.fillStyle = color;
+        this.ctx.beginPath();
+        this.ctx.moveTo(x + 8, y + 22);
+        this.ctx.lineTo(x + 24, y + 22);
+        this.ctx.lineTo(x + 22, y + 12 + pulse);
+        this.ctx.lineTo(x + 10, y + 12 + pulse);
+        this.ctx.closePath();
+        this.ctx.fill();
+
+        this.ctx.fillStyle = "#d2d4de";
+        this.ctx.beginPath();
+        this.ctx.arc(x + 16, y + 9 + pulse, 5, 0, Math.PI * 2);
+        this.ctx.fill();
+
+        this.ctx.fillStyle = "#00ffcc";
+        if (typeLabel === "BOSS") this.ctx.fillStyle = "#ff0055";
+        if (typeLabel === "MERCHANT") this.ctx.fillStyle = "#ffcc00";
+        this.ctx.fillRect(x + 13, y + 8 + pulse, 6, 2);
+    },
+
+    drawTilemap() {
+        if (!this.activeMap) return; // CRITICAL RACE CONDITION REPAIR GUARD
+        const layout = this.activeMap.layout;
+        this.ctx.fillStyle = this.activeMap.groundColor; this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        this.ctx.strokeStyle = "rgba(0, 255, 204, 0.04)";
+        for(let i = 0; i < this.canvas.width; i += 16) { this.ctx.beginPath(); this.ctx.moveTo(i, 0); this.ctx.lineTo(i, this.canvas.height); this.ctx.stroke(); }
+
+        for (let r = 0; r < layout.length; r++) {
+            for (let c = 0; c < layout[r].length; c++) {
+                let type = layout[r][c]; let x = c * this.tileSize; let y = r * this.tileSize;
+                if (type === 1) {
+                    let grad = this.ctx.createLinearGradient(x, y, x + this.tileSize, y + this.tileSize); grad.addColorStop(0, "rgba(0, 255, 204, 0.1)"); grad.addColorStop(1, this.activeMap.grassColor); this.ctx.fillStyle = grad; this.ctx.fillRect(x + 2, y + 2, this.tileSize - 4, this.tileSize - 4);
+                    this.ctx.strokeStyle = "rgba(0, 255, 204, 0.25)"; this.ctx.strokeRect(x + 2, y + 2, this.tileSize - 4, this.tileSize - 4);
+                } else if (type === 2) {
+                    this.ctx.fillStyle = this.activeMap.wallColor; this.ctx.fillRect(x, y, this.tileSize, this.tileSize); this.ctx.strokeStyle = "#00ffcc"; this.ctx.strokeRect(x + 4, y + 4, this.tileSize - 8, this.tileSize - 8);
+                } else if (type === 3) {
+                    this.ctx.fillStyle = "rgba(255, 51, 51, 0.15)"; this.ctx.fillRect(x, y, this.tileSize, this.tileSize); this.ctx.strokeStyle = "#ff3333"; this.ctx.strokeRect(x + 2, y + 2, this.tileSize - 4, this.tileSize - 4);
+                } else if (type === 4) {
+                    this.ctx.fillStyle = "rgba(255, 204, 0, 0.15)"; this.ctx.fillRect(x, y, this.tileSize, this.tileSize); this.ctx.strokeStyle = "#ffcc00"; this.ctx.strokeRect(x + 2, y + 2, this.tileSize - 4, this.tileSize - 4);
+                } else if (type === 5) {
+                    this.ctx.fillStyle = "rgba(0, 255, 255, 0.15)"; this.ctx.fillRect(x, y, this.tileSize, this.tileSize); this.ctx.strokeStyle = "#00ffff"; this.ctx.strokeRect(x + 2, y + 2, this.tileSize - 4, this.tileSize - 4); this.ctx.fillStyle = "#fff"; this.ctx.fillRect(x + 13, y + 6, 6, 20); this.ctx.fillRect(x + 6, y + 13, 20, 6);
+                } else if (type === 6) {
+                    let goldPulse = Math.sin(Date.now() / 200) * 0.15;
+                    this.ctx.fillStyle = `rgba(255, 215, 0, ${0.85 + goldPulse})`; this.ctx.fillRect(x + 3, y + 3, this.tileSize - 6, this.tileSize - 6);
+                    this.ctx.strokeStyle = "#fff8dc"; this.ctx.lineWidth = 2; this.ctx.strokeRect(x + 3, y + 3, this.tileSize - 6, this.tileSize - 6);
+                    this.ctx.fillStyle = "#8a6d00"; this.ctx.font = "bold 9px Courier New"; this.ctx.textAlign = "center"; this.ctx.fillText("$", x + this.tileSize/2, y + this.tileSize/2 + 4); this.ctx.textAlign = "left";
+                }
+            }
+        }
+
+        for (let npc of this.activeMap.npcs) { 
+            let npcRole = "CIVILIAN";
+            if (npc.isBoss) npcRole = "BOSS";
+            if (npc.isShop) npcRole = "MERCHANT";
+            this.drawHumanoidSprite(npc.gridX * this.tileSize, npc.gridY * this.tileSize, npc.color, npcRole);
+        }
+
+        this.drawHumanoidSprite(this.pixelPos.x, this.pixelPos.y, "#ffffff", "PLAYER");
+        
+        this.ctx.fillStyle = "rgba(0,0,0,0.85)"; this.ctx.strokeStyle = "#00ffcc"; this.ctx.lineWidth = 2; this.ctx.fillRect(10, 10, 310, 44); this.ctx.strokeRect(10, 10, 310, 44); this.ctx.fillStyle = "#fff"; this.ctx.font = "bold 10px Courier New";
+        this.ctx.fillText(this.activeMap.name.toUpperCase(), 16, 25); this.ctx.fillText(`FRAGMENTS: ${this.linkDataFragments}F | REPAIR KITS: ${this.inventory["Nano-Repair"]}`, 16, 40);
+    },
+
+    drawProceduralMonsterSprite(mon, x, y, size) {
+        const scalePulse = Math.sin(Date.now() / 120) * 3;
+        this.ctx.save();
+        this.ctx.shadowBlur = 20;
+        this.ctx.shadowColor = mon.color;
+
+        this.ctx.fillStyle = "rgba(0,0,0,0.3)";
+        this.ctx.beginPath();
+        this.ctx.ellipse(x + size/2, y + size, size/2, 6, 0, 0, Math.PI*2);
+        this.ctx.fill();
+
+        this.ctx.fillStyle = mon.color;
+        if (mon.type === "Plasma") {
+            this.ctx.beginPath();
+            this.ctx.moveTo(x + size/2, y + scalePulse);
+            this.ctx.lineTo(x + size - scalePulse, y + size/2);
+            this.ctx.lineTo(x + size/2, y + size - scalePulse);
+            this.ctx.lineTo(x + scalePulse, y + size/2);
+            this.ctx.closePath();
+            this.ctx.fill();
+        } else if (mon.type === "Bio") {
+            this.ctx.beginPath();
+            this.ctx.arc(x + size/2, y + size/2, size/2.3 + scalePulse/2, 0, Math.PI*2);
+            this.ctx.fill();
+        } else if (mon.type === "Cyber") {
+            this.ctx.fillRect(x + 8, y + 8 + scalePulse, size - 16, size - 16 - scalePulse);
+        } else { 
+            this.ctx.fillRect(x + scalePulse, y + scalePulse, size - scalePulse*2, size - scalePulse*2);
+        }
+
+        this.ctx.fillStyle = "#ffffff";
+        this.ctx.beginPath();
+        this.ctx.arc(x + size/2, y + size/2, 6, 0, Math.PI*2);
+        this.ctx.fill();
+
+        this.ctx.restore();
+    },
+
+    drawBattleLayout() {
+        let g = this.ctx.createLinearGradient(0, 0, 0, this.canvas.height); g.addColorStop(0, "#07080d"); g.addColorStop(0.6, "#0f111a"); g.addColorStop(1, "#050608"); this.ctx.fillStyle = g; this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        if (this.enemyMon && this.enemyMon.isOverclocked) { this.ctx.fillStyle = `rgba(255, 0, 0, ${0.05 + Math.sin(Date.now() / 100) * 0.02})`; this.ctx.fillRect(0,0,this.canvas.width,this.canvas.height); }
+        this.ctx.fillStyle = "rgba(0, 255, 204, 0.08)"; this.ctx.beginPath(); this.ctx.ellipse(380, 130, 75, 18, 0, 0, Math.PI * 2); this.ctx.fill(); this.ctx.beginPath(); this.ctx.ellipse(130, 265, 100, 24, 0, 0, Math.PI * 2); this.ctx.fill();
+        
+        if (this.enemyMon && this.enemyMon.hp > 0) { 
+            this.drawProceduralMonsterSprite(this.enemyMon, 345, 60, 65);
+            this.drawUIStatusBlock(this.enemyMon, 30, 35, 200); 
+        }
+        if (this.activePlayerMon && this.activePlayerMon.hp > 0) { 
+            this.drawProceduralMonsterSprite(this.activePlayerMon, 95, 175, 75);
+            this.drawUIStatusBlock(this.activePlayerMon, 270, 195, 210); 
+        }
+    },
+
+    drawUIStatusBlock(mon, x, y, width) {
+        this.ctx.fillStyle = "#0d0f18"; this.ctx.strokeStyle = mon.isOverclocked ? "#ff3333" : "#00ffcc"; this.ctx.lineWidth = 2; this.ctx.fillRect(x, y, width, 76); this.ctx.strokeRect(x, y, width, 76); this.ctx.fillStyle = "#fff"; this.ctx.font = "bold 11px Courier New"; this.ctx.textAlign = "left";
+        let label = mon.isOverclocked ? `[OVERCLOCK] ${mon.name}` : mon.name; this.ctx.fillText(label.toUpperCase(), x + 10, y + 20); this.ctx.fillText(`Lv${mon.level}`, x + width - 45, y + 20);
+        this.ctx.fillStyle = "#1b1f35"; this.ctx.fillRect(x + 10, y + 28, width - 20, 8); let ratio = Math.max(0, mon.hp / mon.maxHp); this.ctx.fillStyle = ratio > 0.5 ? "#00ffcc" : ratio > 0.2 ? "#ff9e64" : "#f7768e"; this.ctx.fillRect(x + 10, y + 28, (width - 20) * ratio, 8);
+        let expRatio = Math.max(0, Math.min(1, mon.exp / mon.expNeeded)); this.ctx.fillStyle = "#1b1f35"; this.ctx.fillRect(x + 10, y + 44, width - 20, 6); this.ctx.fillStyle = "#ffd166"; this.ctx.fillRect(x + 10, y + 44, (width - 20) * expRatio, 6);
+        this.ctx.fillStyle = "#a9b1d6"; this.ctx.font = "10px Courier New"; this.ctx.fillText(`${mon.hp}/${mon.maxHp} HP [${mon.type}]`, x + 10, y + 60); this.ctx.fillText(`EXP ${mon.exp}/${mon.expNeeded}`, x + 10, y + 70);
+    },
+
+    initBattleUI() {
+        this.buttonsContainer.innerHTML = "";
+        if (this.battleSubState === "MAIN_MENU") {
+            this.createMenuButton("EXECUTE ATTACK", () => { this.battleSubState = "FIGHT"; this.initBattleUI(); }); this.createMenuButton("ITEM MATRIX", () => { this.battleSubState = "BAG"; this.initBattleUI(); }); this.createMenuButton("PARTY ROSTER", () => { this.battleSubState = "PARTY"; this.initBattleUI(); });
+            if (!this.isBossBattle) this.createMenuButton("ESCAPE LINK", () => this.executeActionTurnStack({ type: 'RUN' })); else this.createMenuButton("[LOCKED]", () => {});
+        } else if (this.battleSubState === "FIGHT") {
+            this.activePlayerMon.moves.forEach(mKey => { const move = MOVES[mKey]; this.createMenuButton(`${move.name} [${move.type}]`, () => this.executeActionTurnStack({ type: 'MOVE', object: move })); });
+            this.createMenuButton("<< CANCEL", () => { this.battleSubState = "MAIN_MENU"; this.initBattleUI(); });
+        } else if (this.battleSubState === "BAG") {
+            Object.keys(this.inventory).forEach(itemKey => { let count = this.inventory[itemKey]; if (count > 0 && itemKey !== "Decrypt Key") { this.createMenuButton(`${itemKey} (${count})`, () => { if (itemKey === "Link Card" || itemKey === "Great Link") this.executeActionTurnStack({ type: 'CAPTURE', name: itemKey }); else this.executeActionTurnStack({ type: 'ITEM', name: itemKey }); }); } });
+            this.createMenuButton("<< CANCEL", () => { this.battleSubState = "MAIN_MENU"; this.initBattleUI(); });
+        } else if (this.battleSubState === "PARTY") {
+            this.playerParty.forEach((mon, index) => { let statusLabel = mon === this.activePlayerMon ? "[ACTIVE]" : `(${mon.hp}/${mon.maxHp} HP)`; this.createPartyRosterButton(mon, index, statusLabel, () => { if (mon === this.activePlayerMon || mon.hp <= 0) return; this.executeActionTurnStack({ type: 'SWAP', index: index }); }); });
+            this.createMenuButton("<< CANCEL", () => { this.battleSubState = "MAIN_MENU"; this.initBattleUI(); });
+        }
+    },
+
+    createMenuButton(text, callback) { const btn = document.createElement("div"); btn.className = "btn"; btn.innerText = text; btn.onclick = () => { if (!this.inputLock) callback(); }; this.buttonsContainer.appendChild(btn); },
+    createPartyRosterButton(mon, index, statusLabel, callback) { const btn = document.createElement("div"); btn.className = "btn"; btn.onclick = () => { if (!this.inputLock) callback(); };
+        const title = document.createElement("div"); title.innerText = `${mon.name} Lv${mon.level} ${statusLabel}`;
+        const barTrack = document.createElement("div"); barTrack.style.marginTop = "6px"; barTrack.style.height = "6px"; barTrack.style.background = "#1b1f35"; barTrack.style.position = "relative";
+        const barFill = document.createElement("div"); const expRatio = Math.max(0, Math.min(1, mon.exp / mon.expNeeded)); barFill.style.height = "100%"; barFill.style.width = `${expRatio * 100}%`; barFill.style.background = "#ffd166";
+        const barLabel = document.createElement("div"); barLabel.style.marginTop = "2px"; barLabel.style.fontSize = "9px"; barLabel.style.color = "#a9b1d6"; barLabel.innerText = `EXP ${mon.exp}/${mon.expNeeded}`;
+        barTrack.appendChild(barFill); btn.appendChild(title); btn.appendChild(barTrack); btn.appendChild(barLabel); this.buttonsContainer.appendChild(btn); },
+    executeActionTurnStack(playerAction) { this.inputLock = true; this.buttonsContainer.innerHTML = ""; const enemyMoveKey = this.enemyMon.moves[Math.floor(Math.random() * this.enemyMon.moves.length)]; const enemyAction = { type: 'MOVE', object: MOVES[enemyMoveKey] }; let queue = []; if (playerAction.type === 'ITEM' || playerAction.type === 'CAPTURE' || playerAction.type === 'SWAP' || playerAction.type === 'RUN') { queue = [{ entity: this.activePlayerMon, target: this.enemyMon, action: playerAction }, { entity: this.enemyMon, target: this.activePlayerMon, action: enemyAction }]; } else { if (this.activePlayerMon.spd >= this.enemyMon.spd) { queue = [{ entity: this.activePlayerMon, target: this.enemyMon, action: playerAction }, { entity: this.enemyMon, target: this.activePlayerMon, action: enemyAction }]; } else { queue = [{ entity: this.enemyMon, target: this.activePlayerMon, action: enemyAction }, { entity: this.activePlayerMon, target: this.enemyMon, action: playerAction }]; } } this.processQueueStep(queue, 0); },
+
+    processQueueStep(queue, index) {
+        if (index >= queue.length) { this.evaluateOverclockTriggers(); return; } const step = queue[index]; if (step.entity !== this.enemyMon) step.entity = this.activePlayerMon; if (step.target !== this.enemyMon) step.target = this.activePlayerMon; if (step.entity.hp <= 0 && step.action.type !== 'SWAP') { this.processQueueStep(queue, index + 1); return; }
+        
+        if (step.action.type === 'RUN') { this.terminateBattleScene(); }
+        else if (step.action.type === 'SWAP') { this.activePlayerMon = this.playerParty[step.action.index]; this.combatLogFeed = `Signature swap execution. Appending: ${this.activePlayerMon.name}!`; this.dialogue.innerText = this.combatLogFeed; setTimeout(() => this.processQueueStep(queue, index + 1), 1400); }
+        else if (step.action.type === 'ITEM') { this.inventory[step.action.name]--; this.activePlayerMon.hp = Math.min(this.activePlayerMon.maxHp, this.activePlayerMon.hp + 25); this.combatLogFeed = `Nano-Repair sequence initialized. +25 HP committed to ${this.activePlayerMon.name}.`; this.dialogue.innerText = this.combatLogFeed; setTimeout(() => this.processQueueStep(queue, index + 1), 1400); } 
+        else if (step.action.type === 'CAPTURE') { this.inventory[step.action.name]--; if (this.isBossBattle) { this.combatLogFeed = `COMPILING FAILED: HOST NODE SECURITY LOCK ACTIVE. LINK INITIALIZATION UNRECOGNIZED.`; this.dialogue.innerText = this.combatLogFeed; setTimeout(() => this.processQueueStep(queue, index + 1), 1400); return; } let caught = step.action.name === 'Great Link' ? this.enemyMon.hp < 26 : Math.random() * 255 < ((3 * this.enemyMon.maxHp - 2 * this.enemyMon.hp) * this.enemyMon.syncRate) / (3 * this.enemyMon.maxHp); if (caught) { this.combatLogFeed = (step.action.name === 'Great Link' ? `Great Link engaged! ${this.enemyMon.name} was below the threshold and linked.` : `Core parsed cleanly! Linked ${this.enemyMon.name} variables to stack layout.`) + this.checkCatchMilestone(); this.dialogue.innerText = this.combatLogFeed; this.enemyMon.hp = this.enemyMon.maxHp; this.playerParty.push(this.enemyMon); this.saveProfileToStorage(); setTimeout(() => this.terminateBattleScene(), 1600); } else { this.combatLogFeed = step.action.name === 'Great Link' ? `Great Link threshold not met. ${this.enemyMon.name} resisted the link.` : `Link configuration package collision error. Anomaly structural boundaries retained.`; this.dialogue.innerText = this.combatLogFeed; setTimeout(() => this.processQueueStep(queue, index + 1), 1400); } }
+        else if (step.action.type === 'MOVE') { 
+            let move = step.action.object; let result = this.evaluateDamageCalculation(step.entity, step.target, move); 
+            if (move.drains) { 
+                let siphon = Math.floor(result.damage / 2); step.entity.hp = Math.min(step.entity.maxHp, step.entity.hp + siphon); 
+                this.combatLogFeed = `${step.entity.name} used ${move.name}! ${result.log}\nSiphoned +${siphon} HP structural fragments.`;
+            } else { 
+                this.combatLogFeed = `${step.entity.name} used ${move.name}!\n${result.log}`; 
+            }
+            this.dialogue.innerText = this.combatLogFeed;
+            if (step.target.hp <= 0) { setTimeout(() => { if (step.target === this.enemyMon) this.processMatchVictory(); else this.handleActiveFaintRouting(); }, 1400); return; }
+            setTimeout(() => this.processQueueStep(queue, index + 1), 1400); 
+        }
+    },
+
+    evaluateDamageCalculation(attacker, defender, move) { 
+        let modifier = (TYPE_CHART[move.type] && TYPE_CHART[move.type][defender.type] !== undefined) ? TYPE_CHART[move.type][defender.type] : 1; 
+        let baseDmg = Math.floor(((2 * attacker.level / 5 + 2) * move.power * (attacker.atk / defender.def)) / 50) + 2; 
+        let finalDmg = Math.floor(baseDmg * modifier); if (attacker.isOverclocked) finalDmg = Math.floor(finalDmg * 1.5); 
+        defender.hp = Math.max(0, defender.hp - finalDmg); 
+        let logOut = `Dealt ${finalDmg} structural damage.`;
+        if(modifier > 1) logOut += " [CRITICAL ELEMENTAL MODIFIER MULTIPLY]";
+        if(modifier < 1 && move.type !== "Primal") logOut += " [TARGET BUFFER INSULATED BRUNT]";
+        return { damage: finalDmg, log: logOut }; 
+    },
+    evaluateOverclockTriggers() { if (this.isBossBattle && this.activeBossSpecies === "A.E.G.I.S. Core" && !this.enemyMon.isOverclocked) { let ratio = this.enemyMon.hp / this.enemyMon.maxHp; if (ratio <= 0.40 && this.enemyMon.hp > 0) { this.enemyMon.isOverclocked = true; this.dialogue.innerText = "!!! CRITICAL LINK EMERGENCY !!!\nA.E.G.I.S. MAINCORE ENGAGING SYSTEM VOLTAGE OVERCLOCK! ATTACK SCALED BY 150%!"; setTimeout(() => { this.inputLock = false; this.initBattleUI(); }, 2200); return; } } this.inputLock = false; this.dialogue.innerText = "Select next command protocol instruction string:"; this.initBattleUI(); },
+    handleActiveFaintRouting() { let alive = this.playerParty.find(m => m.hp > 0); if (alive) { this.inputLock = false; this.initBattleUI(); } else { this.processMatchFailure(); } },
+
+    processMatchVictory() {
+        if (this.isBossBattle && this.activeBossSpecies === "A.E.G.I.S. Core") { this.dialogue.innerText = "OVERSEER INTERCEPT TERMINATED!\nMainframe environmental structural system patch deployed."; this.buttonsContainer.innerHTML = ""; setTimeout(() => { this.gameState = "GAME_OVER"; this.dialogue.innerText = "PARADOX RECONCILED.\nThe Sub-Grid Slums have been saved permanently from deletion loops. Thank you for testing!"; localStorage.removeItem("xenomon_save_profile"); }, 3000); } 
+        else {
+            let shardPayout = Math.floor(this.enemyMon.level * (this.isBossBattle ? 10 : 4)); this.linkDataFragments += shardPayout; 
+            let upgradeMessage = "";
+            if (this.activeBossSpecies === "Null-Hound") { this.inventory["Decrypt Key"] = 1; upgradeMessage = "\n[MODULE PACK ACQUIRED]: Obtained DECRYPT KEY access parameters."; }
+            this.dialogue.innerText = `${this.enemyMon.name} link dropped offline.\nHarvested +${shardPayout}F Shards from core structural scraps.${upgradeMessage}`;
+            setTimeout(() => {
+                let exp = this.enemyMon.level * 15 * 1.5; let result = this.activePlayerMon.gainExp(exp);
+                let bonusLog = this.grantPartyLevelUpBonus(this.activePlayerMon, result.levelsGained);
+                this.saveProfileToStorage();
+                if (result.log !== "") { this.dialogue.innerText = result.log + bonusLog; setTimeout(() => this.terminateBattleScene(), 2500); } else { this.terminateBattleScene(); }
+            }, 1400);
+        }
+    },
+
+    processMatchFailure() { this.dialogue.innerText = "Stack overflow fatal warning! Connection arrays completely shattered."; this.playerParty = []; this.activePlayerMon = null; this.enemyMon = null; this.isBossBattle = false; this.activeBossSpecies = ""; this.inventory = { "Nano-Repair": 5, "Link Card": 3, "Decrypt Key": 0, "Great Link": 0, "XP Candy": 0 }; this.linkDataFragments = 20; this.currentMapKey = "SECTOR_01"; this.activeMap = null; this.playerGridPos = { x: 4, y: 5 }; this.pixelPos = { x: 4 * 32, y: 5 * 32 }; this.ui.style.display = "grid"; this.inputLock = false; localStorage.removeItem("xenomon_save_profile"); this.initStarterSelectionScreen(); },
+    terminateBattleScene() { this.gameState = "OVERWORLD"; this.ui.style.display = "grid"; this.inputLock = false; this.enemyMon = null; this.isBossBattle = false; this.activeBossSpecies = ""; this.render(); },
+
+    drawSelectionBackgroundLayout() {
+        this.ctx.fillStyle = "#030408"; this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        this.ctx.strokeStyle = "rgba(0, 255, 204, 0.08)"; this.ctx.lineWidth = 1;
+        for(let i=0; i<this.canvas.width; i+=16) { this.ctx.beginPath(); this.ctx.moveTo(i,0); this.ctx.lineTo(i,this.canvas.height); this.ctx.stroke(); }
+        this.ctx.fillStyle = "rgba(0, 255, 204, 0.02)"; this.ctx.fillRect(40, 40, this.canvas.width - 80, this.canvas.height - 80);
+    },
+
+    render() {
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height); 
+        if (this.gameState === "STARTER_SELECT") {
+            this.drawSelectionBackgroundLayout();
+        } else if (this.gameState === "BATTLE") {
+            this.drawBattleLayout();
+        } else if (this.gameState === "OVERWORLD" || this.gameState === "TEXT_BOX" || this.gameState === "SHOP_MENU" || this.gameState === "TRANSITION" || this.gameState === "SELL_MENU") {
+            this.drawTilemap();
+        } else if (this.gameState === "ROSTER_VIEW") {
+            if (this.previousGameStateForRoster === "BATTLE") this.drawBattleLayout(); else this.drawTilemap();
+        } else if (this.gameState === "XP_INFO") {
+            if (this.previousGameStateForXpInfo === "BATTLE") this.drawBattleLayout(); else this.drawTilemap();
+        }
+
+        if (this.gameState === "TRANSITION") { 
+            let color = this.isBossBattle ? (this.activeBossSpecies === "A.E.G.I.S. Core" ? "0, 255, 204" : "153, 51, 255") : "0, 255, 204"; 
+            this.ctx.fillStyle = `rgba(${color}, ${this.transitionTimer / 100})`; 
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height); 
+        }
+    }
+};
+
+document.addEventListener("DOMContentLoaded", () => {
+    setTimeout(() => {
+        Game.init();
+    }, 50);
+});
+</script>
+
+</body>
+</html>
